@@ -12,8 +12,10 @@ import time
 import pandas as pd
 import streamlit as st
 import hobox_core as hc
+import access
 
 st.set_page_config(page_title="호칭박스", layout="wide")
+USER = access.require_access("hobox")      # 로그인하지 않았으면 여기서 멈춘다
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 

@@ -6,7 +6,8 @@
 - `app.py` 화면
 - `hobox_core.py` 분석 로직 (화면 없이도 `analyze()`로 호출 가능)
 - `default_titles.csv` 기본 예시 호칭 리스트 (화면에서 고쳐 쓸 수 있음)
-- `requirements.txt` streamlit, pandas, openpyxl
+- `access.py` 접근 통제(로그인 + Firebase 사용자 명단 + 관리자 화면)
+- `requirements.txt` streamlit, pandas, openpyxl, google-cloud-firestore
 
 ## 실행
 - 로컬: `pip install -r requirements.txt` → `streamlit run app.py`
@@ -24,3 +25,19 @@
 - '당시 ○○' 형태 제외
 - 같은 호칭의 다른 날짜와 60일(전 호칭은 180일) 넘게 떨어진 외톨이 1건은 별도 시트로 배제
 - 기사 제목·소제목은 근거로 쓰지 않음
+
+## 접근 통제 설정 (Firebase)
+1. Firebase 콘솔에서 Firestore 데이터베이스를 만든다(프로덕션 모드, 규칙은 기본 '모두 거부' 그대로 — 앱은 서버 열쇠로 접근한다).
+2. 프로젝트 설정 → 서비스 계정 → [새 비공개 키 생성]으로 JSON을 받는다.
+3. Streamlit Cloud 앱 설정 → Secrets 에 아래를 붙여 넣는다 (JSON 값을 옮겨 적는다).
+
+```toml
+setup_key = "처음 관리자를 만들 때만 쓰는 임의의 긴 문자열"
+
+firebase_json = '''
+(받은 JSON 파일을 메모장으로 열어 내용 전체를 여기에 붙여 넣는다)
+'''
+```
+4. 앱을 처음 열면 '최초 관리자 만들기' 화면이 나온다. 설치 키, 관리자 아이디, 접속 코드를 넣는다.
+5. 이후 관리자로 로그인하면 사이드바 '사용자 관리'에서 사용자를 추가·중지·재개하고 접속 코드를 재발급한다.
+설정(Secrets)이 없으면 앱은 열리지 않는다. 로컬 시험은 환경변수 `ACCESS_DEV=1` (메모리 저장, 재시작하면 사라짐).
