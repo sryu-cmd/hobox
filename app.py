@@ -151,3 +151,28 @@ if final:
 st.download_button("엑셀로 내려받기", data=hc.build_xlsx(shown),
                    file_name=f"호칭별_기간_{res['name']}.xlsx",
                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+# ── 동성 동호칭 타인 기사 ──
+st.header("동성 동호칭 타인이 나온 기사")
+st.caption("지정발언자와 성이 같고 이름이 다른 사람이 정치 호칭과 함께 나온 기사를 찾습니다. 이런 기사에서는 \"김 의원은\"처럼 성+호칭만 "
+           "쓴 발언이 지정발언자의 것인지 확인해야 합니다. 이 목록의 CSV를 매직박스에 올리면, 목록에 없는 기사의 풀네임 확인 표시가 사라집니다.")
+fam = st.text_area("겸직 계열 호칭 (쉼표로 구분, 고쳐 쓸 수 있음)", value=hc.FAMILY_DEFAULT, height=100, key="fam_titles")
+if st.button("동성 동호칭 기사 찾기"):
+    with st.spinner("찾는 중입니다…"):
+        st.session_state["same"] = hc.find_same_surname(st.session_state["header"], st.session_state["rows"],
+                                                       st.session_state["name"], fam)
+same = st.session_state.get("same")
+if same:
+    if "error" in same:
+        st.error(same["error"])
+    else:
+        st.success(f"전체 {same['total']:,}건 중 {same['n_articles']:,}건의 기사에 같은 성의 다른 사람이 나옵니다. (타인 {len(same['summ'])}명)")
+        st.dataframe(pd.DataFrame(same["summ"], columns=same["TS"]), width="stretch", hide_index=True)
+        with st.expander("기사 목록"):
+            st.dataframe(pd.DataFrame(same["rows"], columns=same["T"]), width="stretch", hide_index=True)
+        c1, c2 = st.columns(2)
+        c1.download_button("엑셀로 내려받기 (보기용)", data=hc.same_xlsx(same), key="same_x",
+                           file_name=f"동성동호칭_타인_기사_{st.session_state['name']}.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        c2.download_button("CSV로 내려받기 (매직박스에 올리는 용)", data=hc.same_csv(same), key="same_c",
+                           file_name=f"동성동호칭_타인_기사_{st.session_state['name']}.csv", mime="text/csv")
