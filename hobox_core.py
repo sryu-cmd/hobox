@@ -438,3 +438,80 @@ def read_table(file_bytes, filename):
         csv.field_size_limit(10**9)
         rows = list(csv.reader(io.StringIO(text)))
     return rows[0], [r for r in rows[1:] if any(r)]
+
+
+# ───────────────────────── 동성 동호칭 타인 기사 찾기 ─────────────────────────
+# 정의(편집인 확정, 2026-10-18): 지정발언자와 성이 같고 이름이 다른 사람이 '정치 호칭'과 함께 같은 기사에 나오면
+# 그 기사는 '풀네임 확인 필요' 기사다. 정치인은 겸직이 흔하므로 호칭은 정확히 같지 않아도 겸직 계열이면 같은 호칭으로 본다.
+FAMILY_DEFAULT = ('의원, 최고위원, 위원, 위원장, 간사, 대표, 당대표, 원내대표, 부대표, 원내부대표, 수석부대표, '
+                  '원내수석부대표, 원내정책수석부대표, 정책수석부대표, 원내수석, 원내정책수석, 정책위의장, 사무총장, '
+                  '대변인, 수석대변인, 부대변인, 원내대변인, 의장, 부의장, 비대위원장, 혁신위원장, 후보')
+_PARTY = (r'(?:(?:더불어민주당|민주당|국민의힘|국힘|조국혁신당|혁신당|개혁신당|진보당|기본소득당|사회민주당|'
+          r'새로운미래|무소속|야당|여당|당)\s)')
+SAME_COLS = ['일자', '제목', '타인 이름', '호칭', '기사에 지정발언자 포함', '문장', 'URL']
+SAME_SUM_COLS = ['타인 이름', '기사수', '호칭', '첫 등장', '마지막 등장', '지정발언자와 함께 나온 기사']
+
+
+def find_same_surname(header, data, name, titles_text=FAMILY_DEFAULT):
+    di, ti, tt, ui = _read_cols(header)
+    titles = [t.strip() for t in re.split(r'[,\n]', titles_text) if t.strip()]
+    if not titles or not name.strip():
+        return {'error': '호칭 목록과 성명을 입력하세요.'}
+    name = name.strip()
+    T = '|'.join(sorted(map(re.escape, titles), key=len, reverse=True))
+    pat = re.compile(r'(?<![가-힣])(' + re.escape(name[0]) + r'[가-힣]{2})\s?' + _PARTY + r'{0,2}(전\s)?(' + T + r')(?![가-힣])')
+    rows, seen = [], set()
+    for r in data:
+        if len(r) <= max(di, ti, tt):
+            continue
+        text = body_without_headings(r[ti])
+        hits = {}
+        for m in pat.finditer(text):
+            nm, jeon, ti_ = m.group(1), m.group(2), m.group(3)
+            if nm == name or jeon or not looks_like_name(nm):
+                continue
+            a = max(0, m.start() - 30)
+            hits.setdefault((nm, ti_), text[a:m.end() + 40].replace('\n', ' '))
+        if not hits:
+            continue
+        url = r[ui] if ui is not None and ui < len(r) else ''
+        key = url or (r[di], r[tt])
+        if key in seen:
+            continue
+        seen.add(key)
+        has = 'O' if name in text else ''
+        for (nm, ti_), ctx in hits.items():
+            rows.append([norm_date(r[di]), r[tt], nm, ti_, has, ctx, url])
+    rows.sort(key=lambda x: (x[0], x[1]))
+    by = {}
+    for x in rows:
+        b = by.setdefault(x[2], {'urls': set(), 'ti': set(), 'dates': [], 'with': 0})
+        b['urls'].add(x[6] or x[1]); b['ti'].add(x[3]); b['dates'].append(x[0]); b['with'] += (x[4] == 'O')
+    summ = sorted(([k, len(v['urls']), ', '.join(sorted(v['ti'])), min(v['dates']), max(v['dates']), v['with']]
+                   for k, v in by.items()), key=lambda s: -s[1])
+    return {'T': SAME_COLS, 'rows': rows, 'TS': SAME_SUM_COLS, 'summ': summ, 'n_articles': len(seen), 'total': len(data)}
+
+
+def same_xlsx(res):
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active; ws.title = '1.기사 목록'
+    ws.append(res['T']); [ws.append(r) for r in res['rows']]
+    ws2 = wb.create_sheet('2.타인별 요약')
+    ws2.append(res['TS']); [ws2.append(r) for r in res['summ']]
+    for w, widths in ((ws, (11, 40, 10, 14, 10, 60, 40)), (ws2, (10, 8, 24, 11, 11, 12))):
+        for i, wd in enumerate(widths):
+            w.column_dimensions[chr(65 + i)].width = wd
+    bio = io.BytesIO(); wb.save(bio)
+    return bio.getvalue()
+
+
+def same_csv(res):
+    """매직박스에 올리는 용도: URL이 있는 행만. 열: URL, 일자, 제목, 타인 이름, 호칭"""
+    buf = io.StringIO(); w = csv.writer(buf)
+    w.writerow(['URL', '일자', '제목', '타인 이름', '호칭'])
+    seen = set()
+    for r in res['rows']:
+        if r[6] and r[6] not in seen:
+            seen.add(r[6]); w.writerow([r[6], r[0], r[1], r[2], r[3]])
+    return buf.getvalue().encode('utf-8-sig')
