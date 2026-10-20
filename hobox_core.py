@@ -459,7 +459,9 @@ def find_same_surname(header, data, name, titles_text=FAMILY_DEFAULT):
         return {'error': '호칭 목록과 성명을 입력하세요.'}
     name = name.strip()
     T = '|'.join(sorted(map(re.escape, titles), key=len, reverse=True))
-    pat = re.compile(r'(?<![가-힣])(' + re.escape(name[0]) + r'[가-힣]{2})\s?' + _PARTY + r'{0,2}(전\s)?(' + T + r')(?![가-힣])')
+    # 이름 뒤: 괄호(지역구·선수 등) 허용, 정당어 허용 / 호칭 뒤: 조사(은·는·이·가·을·를·의…) 허용
+    pat = re.compile(r'(?<![가-힣])(' + re.escape(name[0]) + r'[가-힣]{2})\s?(?:\([^)\n]{0,30}\)\s?)?' + _PARTY + r'{0,2}(전\s)?(?:국회\s?)?(' + T + r')'
+                     r'(?:은|는|이|가|을|를|의|도|과|와|에게|께서|께|에|만|으로|로|인|이라고|이라며|라며|라고)?(?![가-힣])')
     rows, seen = [], set()
     for r in data:
         if len(r) <= max(di, ti, tt):
