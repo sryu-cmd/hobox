@@ -157,10 +157,11 @@ st.header("동성 동호칭 타인이 나온 기사")
 st.caption("지정발언자와 성이 같고 이름이 다른 사람이 정치 호칭과 함께 나온 기사를 찾습니다. 이런 기사에서는 \"김 의원은\"처럼 성+호칭만 "
            "쓴 발언이 지정발언자의 것인지 확인해야 합니다. 이 목록의 CSV를 매직박스에 올리면, 목록에 없는 기사의 풀네임 확인 표시가 사라집니다.")
 fam = st.text_area("겸직 계열 호칭 (쉼표로 구분, 고쳐 쓸 수 있음)", value=hc.FAMILY_DEFAULT, height=100, key="fam_titles")
+extra = st.text_input("직접 추가할 같은 성의 타인 (쉼표로 구분, 선택)", key="fam_extra", placeholder="예: 김웅  (외자 이름은 자동으로 잡히지 않으므로 여기에 적습니다)")
 if st.button("동성 동호칭 기사 찾기"):
     with st.spinner("찾는 중입니다…"):
         st.session_state["same"] = hc.find_same_surname(st.session_state["header"], st.session_state["rows"],
-                                                       st.session_state["name"], fam)
+                                                       st.session_state["name"], fam, extra)
 same = st.session_state.get("same")
 if same:
     if "error" in same:
