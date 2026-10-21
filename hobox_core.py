@@ -452,15 +452,23 @@ SAME_COLS = ['일자', '제목', '타인 이름', '호칭', '기사에 지정발
 SAME_SUM_COLS = ['타인 이름', '기사수', '호칭', '첫 등장', '마지막 등장', '지정발언자와 함께 나온 기사']
 
 
-def find_same_surname(header, data, name, titles_text=FAMILY_DEFAULT):
+def find_same_surname(header, data, name, titles_text=FAMILY_DEFAULT, extra_names=''):
+    """지정발언자와 성이 같고 이름이 다른 사람이 [풀네임+호칭]으로 나온 기사를 찾는다.
+    extra_names: 외자 이름(예: 김웅)처럼 자동으로 잡히지 않는 타인을 쉼표로 직접 적어 넣는다."""
     di, ti, tt, ui = _read_cols(header)
     titles = [t.strip() for t in re.split(r'[,\n]', titles_text) if t.strip()]
     if not titles or not name.strip():
         return {'error': '호칭 목록과 성명을 입력하세요.'}
     name = name.strip()
+    sur = name[0]
+    extras = [e.strip() for e in re.split(r'[,\n]', extra_names or '') if e.strip() and e.strip() != name]
+    extras = [e for e in extras if e[0] == sur]
     T = '|'.join(sorted(map(re.escape, titles), key=len, reverse=True))
-    # 이름 뒤: 괄호(지역구·선수 등) 허용, 정당어 허용 / 호칭 뒤: 조사(은·는·이·가·을·를·의…) 허용
-    pat = re.compile(r'(?<![가-힣])(' + re.escape(name[0]) + r'[가-힣]{2})\s?(?:\([^)\n]{0,30}\)\s?)?' + _PARTY + r'{0,2}(전\s)?(?:국회\s?)?(' + T + r')'
+    name_alt = re.escape(sur) + r'[가-힣]{2}'
+    if extras:
+        name_alt = '|'.join(sorted(map(re.escape, extras), key=len, reverse=True)) + '|' + name_alt
+    # 이름 뒤: 나열('김기표·김용민 의원')·괄호(지역구 등)·정당어 허용 / 호칭 뒤: 조사(은·는·이·가·을·를·의…) 허용
+    pat = re.compile(r'(?<![가-힣])(' + name_alt + r')((?:[·,]\s?[가-힣]{2,4})*)\s?(?:\([^)\n]{0,30}\)\s?)?' + _PARTY + r'{0,2}(전\s)?(?:국회\s?)?(' + T + r')'
                      r'(?:은|는|이|가|을|를|의|도|과|와|에게|께서|께|에|만|으로|로|인|이라고|이라며|라며|라고)?(?![가-힣])')
     rows, seen = [], set()
     for r in data:
@@ -469,11 +477,17 @@ def find_same_surname(header, data, name, titles_text=FAMILY_DEFAULT):
         text = body_without_headings(r[ti])
         hits = {}
         for m in pat.finditer(text):
-            nm, jeon, ti_ = m.group(1), m.group(2), m.group(3)
-            if nm == name or jeon or not looks_like_name(nm):
+            n1, chain, jeon, ti_ = m.group(1), m.group(2), m.group(3), m.group(4)
+            if jeon:
                 continue
+            members = [n1] + re.findall(r'[가-힣]{2,4}', chain or '')
             a = max(0, m.start() - 30)
-            hits.setdefault((nm, ti_), text[a:m.end() + 40].replace('\n', ' '))
+            for nm in members:
+                if nm[0] != sur or nm == name or nm[1:2] == '씨':      # '김씨가 후보'의 '김씨가'는 이름이 아니다
+                    continue
+                if nm not in extras and not looks_like_name(nm):
+                    continue
+                hits.setdefault((nm, ti_), text[a:m.end() + 40].replace('\n', ' '))
         if not hits:
             continue
         url = r[ui] if ui is not None and ui < len(r) else ''
