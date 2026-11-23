@@ -68,6 +68,8 @@ with st.sidebar:
                              help="이보다 적게 나온 호칭은 표에서 뺍니다.")
     gap = st.number_input("외톨이 1건 판정 일수", min_value=7, max_value=365, value=60,
                           help="같은 호칭의 다른 날짜와 이 일수보다 더 떨어진 1건은 배제합니다. ('전 ○○'는 3배)")
+    auto_end = st.text_input("끝말로 자동 선정할 호칭 (쉼표로 구분, 선택)", placeholder="예: 대표, 의장, 위원장",
+                             help="예시 리스트에 없는 호칭 후보 중, 이 끝말로 끝나는 것을 2단계에서 직접 체크하지 않아도 자동으로 채택해 3단계 결과에 넣습니다. 띄어쓰기는 무시하고 글자가 그대로 끝에 오는지 봅니다. 예) '의장'은 국회의장·부의장·수석부의장을 모두 포함하고, '부의장'은 부의장·수석부의장만 포함합니다.")
     with st.expander("예시 호칭 리스트 (고쳐 쓸 수 있음)"):
         st.caption("1열=호칭, 3열=변형(쉼표로 구분). '전 의원, 전 대표…' 줄은 참고용입니다. "
                    "아래 칸을 직접 고치거나, 같은 형식의 CSV를 올리세요.")
@@ -89,6 +91,13 @@ if run:
         st.stop()
     st.session_state.update(res=res, header=header, rows=rows, msgs=msgs, name=name.strip(), seed=seed_text,
                             minart=int(minart), gap=int(gap), final=None, secs=time.time() - t0)
+    ends = [e.strip().replace(" ", "") for e in auto_end.split(",") if e.strip()]
+    auto = [r[1] for r in res["t2"] if ends and r[1].replace(" ", "").endswith(tuple(ends))]
+    if auto:
+        with st.spinner("끝말로 고른 호칭을 반영해 다시 계산 중입니다…"):
+            st.session_state["final"] = hc.analyze(header, rows, name.strip(), seed_text, minart=int(minart),
+                                                   adopted=auto, isolated_gap=int(gap))
+        st.session_state["adopted"] = auto
 
 res = st.session_state.get("res")
 if not res:
