@@ -80,8 +80,52 @@ def candidates(text, name):
             end = m.start(3) + len(lst) if (lastraw is t2 or lastraw == t2) and m.group(3) else m.start(2) + len(lst)
             ctx = text[max(0, m.start() - 15):m.end() + 12]
             out.append((bool(pre) and pre[0] in '전前', title, bool(RETRO.search(ctx)), ctx.replace('\n', ' '), m.start(), end, josa))
-    return out
+    return out + _candidates_wide(text, name, {m[4] for m in out})
 
+
+MODS = ('신임', '신', '새', '현', '새로운')
+PTOK = r'[가-힣0-9]{1,14}(?:\([^)]{1,15}\))?'
+
+
+def _candidates_wide(text, name, done_pos):
+    """기관명 + 호칭이 3낱말 이상이거나('신임 민주평화통일자문회의(민주평통) 수석부의장') 괄호 약칭이 낀 호칭을 찾는다.
+    candidates()가 못 잡은 자리만 보충한다."""
+    out = []
+    pat = re.escape(name) + r'(?![가-힣])\s?(?:\([^)]{0,12}\)\s?)?((?:전|前|현)\s?)?((?:' + PTOK + r'\s){0,4}' + PTOK + r')'
+    for m in re.finditer(pat, text):
+        if m.start() in done_pos:
+            continue
+        toks = m.group(2).split()
+        pre = (m.group(1) or '').strip()
+        while toks and re.sub(r'\([^)]*\)', '', toks[0]) in MODS:
+            toks = toks[1:]
+        if len(toks) < 2 and not any('(' in t for t in toks):
+            continue
+        title_toks, lastraw, found = [], None, False
+        for t in toks:
+            core = re.sub(r'\([^)]*\)', '', t)
+            c2 = strip_josa(core)
+            if TITLE_SUFFIX.search(c2) and len(c2) >= 2 and not (t.endswith(')') and title_toks == [] and False):
+                title_toks.append(c2); lastraw = core; found = True
+                break
+            if core and core[-1] in '은는이가도을를' and core != c2:
+                break
+            title_toks.append(core)
+            if len(title_toks) > 4:
+                break
+        if not found or len(title_toks) < 2:
+            continue
+        title = ' '.join(title_toks)
+        lst = title_toks[-1]
+        josa = lastraw[len(lst):] if lastraw.startswith(lst) else ''
+        end = m.start(2) + len(m.group(2).split(None, 0)[0]) if False else None
+        # 끝 위치: 원문에서 마지막 호칭 낱말이 끝나는 곳
+        seg = text[m.start(2):m.end(2)]
+        k = seg.rfind(lastraw)
+        end = m.start(2) + k + len(lst) if k >= 0 else m.end(2)
+        ctx = text[max(0, m.start() - 15):m.end() + 12]
+        out.append((bool(pre) and pre[0] in '전前', title, bool(RETRO.search(ctx)), ctx.replace('\n', ' '), m.start(), end, josa))
+    return out
 
 
 SPECIAL_SUN = re.compile(r'선거대책|선대위|선대본')
