@@ -22,6 +22,8 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
+import login_persist as LP
+
 COLLECTION = "users"
 ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"      # 헷갈리는 글자(0 o 1 l i) 제외
 MAX_TRIES = 5
@@ -190,24 +192,67 @@ def _bootstrap(store):
     st.stop()
 
 
+def _login_key():
+    try:
+        k = st.secrets.get("login_key", None)
+    except Exception:
+        k = os.environ.get("ACCESS_LOGIN_KEY")
+    k = k or os.environ.get("ACCESS_LOGIN_KEY")
+    return str(k) if k and len(str(k)) >= 16 else None
+
+
+def _try_cookie_login(store, key, app):
+    """로그인 유지 쿠키가 맞으면 사용자 dict, 아니면 None. 계정 중지·권한 없음·접속 코드 변경 시에는 무효."""
+    try:
+        tok = st.context.cookies.get(LP.COOKIE)
+    except Exception:
+        return None
+    if not tok:
+        return None
+    users = store.all()
+    look = lambda lid: next((u.get("code_hash") for u in users.values() if u.get("login_id") == lid), None)
+    lid = LP.verify(tok, key, look)
+    if not lid:
+        return None
+    uid, u = next((k, u) for k, u in users.items() if u.get("login_id") == lid)
+    if not u.get("active", False) or (u.get("apps") and app not in u["apps"]):
+        return None
+    return {"uid": uid, **u}
+
+
 def require_access(app):
     """앱 맨 위에서 부른다. 통과하면 사용자 dict를 돌려주고, 아니면 화면을 멈춘다."""
     store = get_store()
     if store is None:
         st.error("접근 통제 설정(Firebase)이 없어 열 수 없습니다. 관리자에게 문의하세요.")
         st.stop()
+    key = _login_key()
     me = st.session_state.get("_user")
+    if not me and key and not st.session_state.get("_auto_tried"):
+        st.session_state["_auto_tried"] = True
+        u = _try_cookie_login(store, key, app)
+        if u:
+            u["_app"] = app
+            st.session_state["_user"] = u
+            st.rerun()
     if me and me.get("_app") == app:
+        _tok = st.session_state.pop("_set_cookie", None)
+        if _tok:                                  # 로그인 직후 한 번: 로그인 유지 쿠키를 심는다
+            LP.run_js(st, LP.cookie_js(_tok, LP.TTL))
         with st.sidebar:
             st.caption(f"로그인: {me['login_id']} ({me['uid']}번)")
             if st.button("로그아웃"):
                 st.session_state.pop("_user", None)
+                st.session_state["_clear_cookie"] = True
+                st.session_state["_auto_tried"] = True    # 이 화면에서는 쿠키로 다시 자동 로그인하지 않는다
                 st.rerun()
         if me.get("admin"):
             _admin_panel(store, me)
         return me
     if not store.all():
         _bootstrap(store)
+    if st.session_state.pop("_clear_cookie", False):      # 로그아웃 직후: 쿠키 삭제
+        LP.run_js(st, LP.cookie_js("", 0))
     st.title("로그인")
     if st.session_state.get("_tries", 0) >= MAX_TRIES:
         st.error("시도 횟수를 넘었습니다. 창을 닫고 잠시 후 다시 열어 주세요.")
@@ -215,6 +260,7 @@ def require_access(app):
     with st.form("login"):
         lid = st.text_input("아이디")
         code = st.text_input("접속 코드", type="password")
+        remember = st.checkbox("이 컴퓨터에서 24시간 로그인 유지 (여러 사람이 쓰는 컴퓨터에서는 끄세요)", value=True) if key else False
         go = st.form_submit_button("들어가기")
     if go:
         u, msg = authenticate(store, lid, code, app)
@@ -222,6 +268,8 @@ def require_access(app):
             u["_app"] = app
             st.session_state["_user"] = u
             st.session_state["_tries"] = 0
+            if remember and key:
+                st.session_state["_set_cookie"] = LP.make_token(u["login_id"], u["code_hash"], key)
             st.rerun()
         st.session_state["_tries"] = st.session_state.get("_tries", 0) + 1
         time.sleep(1)
