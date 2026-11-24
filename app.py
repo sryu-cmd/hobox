@@ -12,6 +12,7 @@ import time
 import pandas as pd
 import streamlit as st
 import hobox_core as hc
+import mangra as mg
 import access
 
 st.set_page_config(page_title="호칭박스", layout="wide")
@@ -160,6 +161,24 @@ if final:
 st.download_button("엑셀로 내려받기", data=hc.build_xlsx(shown),
                    file_name=f"호칭별_기간_{res['name']}.xlsx",
                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+# ── 호칭 망라 목록 ──
+st.header("호칭 망라 목록 (성명 뒤에 나온 호칭 전부)")
+st.caption("예시 리스트와 관계없이, 지정발언자 성명 바로 뒤에 나온 호칭을 빠짐없이 모아 같은 직책 후보끼리 묶어 보여 줍니다. "
+           "'인용문 문장 기준'은 매직박스가 발언을 찾는 근거와 같은 조건(호칭 뒤 조사 + 큰따옴표 인용)이고, '전체 기준'은 인용문이 없는 문장까지 포함한 참고용입니다. "
+           "성명 앞에 나온 호칭은 인용문 호칭이 아니므로 3번 시트에 따로 모읍니다. 묶음(수정) 칸은 직접 고쳐 쓰시라는 칸입니다.")
+if st.button("망라 목록 만들기", key="mg_go"):
+    with st.spinner("만드는 중입니다…"):
+        st.session_state["mg"] = mg.analyze_mangra(st.session_state["header"], st.session_state["rows"], st.session_state["name"])
+mgr = st.session_state.get("mg")
+if mgr:
+    st.success(f"{mgr['name']} 언급 기사 {mgr['articles']:,}건에서 직책 묶음 {len(mgr['rows'])}개를 찾았습니다.")
+    st.dataframe(pd.DataFrame(mgr["rows"], columns=mgr["T"]), width="stretch", hide_index=True)
+    with st.expander(f"성명 앞에 나온 호칭 ({len(mgr['pre'])}개, 인용문 호칭 아님)"):
+        st.dataframe(pd.DataFrame(mgr["pre"], columns=mgr["PT"]), width="stretch", hide_index=True)
+    st.download_button("망라 목록 엑셀로 내려받기", data=mg.mangra_xlsx(mgr), key="mg_x",
+                       file_name=f"호칭_망라목록_{mgr['name']}.xlsx",
+                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # ── 동성 동호칭 타인 기사 ──
 st.header("동성 동호칭 타인이 나온 기사")
