@@ -57,7 +57,7 @@ TOK = r'[가-힣0-9]{1,12}'
 def candidates(text, name):
     """(전여부, 호칭, 회고여부, 위치) 목록. 풀네임 바로 뒤의 낱말."""
     out = []
-    for m in re.finditer(re.escape(name) + r'(?![가-힣])\s?(?:\([^)]{0,12}\)\s?)?((?:전|前|현)\s?)?(' + TOK + r')(?:\s(' + TOK + r'))?', text):
+    for m in re.finditer(re.escape(name) + r'(?![가-힣])\s?(?:\([^)]{0,12}\)\s?)?((?:(?:전|현)\s+|前\s?))?(' + TOK + r')(?:\s(' + TOK + r'))?', text):
         pre = (m.group(1) or '').strip()
         t1 = strip_josa(m.group(2))
         t2 = m.group(3)
@@ -91,7 +91,7 @@ def _candidates_wide(text, name, done_pos):
     """기관명 + 호칭이 3낱말 이상이거나('신임 민주평화통일자문회의(민주평통) 수석부의장') 괄호 약칭이 낀 호칭을 찾는다.
     candidates()가 못 잡은 자리만 보충한다."""
     out = []
-    pat = re.escape(name) + r'(?![가-힣])\s?(?:\([^)]{0,12}\)\s?)?((?:전|前|현)\s?)?((?:' + PTOK + r'\s){0,4}' + PTOK + r')'
+    pat = re.escape(name) + r'(?![가-힣])\s?(?:\([^)]{0,12}\)\s?)?((?:(?:전|현)\s+|前\s?))?((?:' + PTOK + r'\s){0,4}' + PTOK + r')'
     for m in re.finditer(pat, text):
         if m.start() in done_pos:
             continue
