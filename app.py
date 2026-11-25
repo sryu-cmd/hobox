@@ -174,6 +174,8 @@ mgr = st.session_state.get("mg")
 if mgr:
     st.success(f"{mgr['name']} 언급 기사 {mgr['articles']:,}건에서 직책 묶음 {len(mgr['rows'])}개를 찾았습니다.")
     st.dataframe(pd.DataFrame(mgr["rows"], columns=mgr["T"]), width="stretch", hide_index=True)
+    st.markdown("**호칭 입력창용 한 줄** (인용문 문장이 있는 묶음의 표기 변형 전체, 쉼표 뒤 공백 없음). 엑셀의 1번 시트 L열 맨 아래에도 들어 있습니다.")
+    st.code(mg.variant_line(mgr), language=None)
     with st.expander(f"성명 앞에 나온 호칭 ({len(mgr['pre'])}개, 인용문 호칭 아님)"):
         st.dataframe(pd.DataFrame(mgr["pre"], columns=mgr["PT"]), width="stretch", hide_index=True)
     st.download_button("망라 목록 엑셀로 내려받기", data=mg.mangra_xlsx(mgr), key="mg_x",
