@@ -192,6 +192,19 @@ def _days(d):
     return datetime.date(int(y), int(m), int(dd)).toordinal()
 
 
+def variant_line(res):
+    """인용문 문장이 1건 이상인 묶음의 표기 변형을 한 줄로 이은 문자열(쉼표 뒤 공백 없음, 중복 제거)."""
+    seen = []
+    for r in res['rows']:
+        if int(r[5] or 0) < 1:
+            continue
+        for part in str(r[11]).split('; '):
+            v = re.sub(r'\(\d+/\d+\)$', '', part.strip())
+            if v and v not in seen:
+                seen.append(v)
+    return ','.join(seen)
+
+
 def mangra_xlsx(res):
     from openpyxl import Workbook
     from openpyxl.styles import Font
@@ -210,6 +223,8 @@ def mangra_xlsx(res):
         ws.freeze_panes = 'A2'
         for j, w in enumerate(widths):
             ws.column_dimensions[chr(65 + j)].width = w
+        if i == 0:
+            ws.cell(len(rows) + 3, 12).value = variant_line(res)   # L열 마지막 행 아래 한 줄 띄우고: 호칭 입력창용
     bio = io.BytesIO()
     wb.save(bio)
     return bio.getvalue()
